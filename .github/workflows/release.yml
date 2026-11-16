@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build OrangeMouse.exe
+        run: >
+          pyinstaller --noconfirm --clean --onefile
+          --name OrangeMouse
+          --add-data "static;static"
+          --hidden-import pynput.mouse._win32
+          --hidden-import pynput.keyboard._win32
+          --hidden-import qrcode.image.svg
+          --hidden-import tkinter
+          server.py
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/OrangeMouse.exe
+          if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Build OrangeMouse.app
+        run: >
+          pyinstaller --noconfirm --clean --windowed
+          --name OrangeMouse
+          --add-data "static:static"
+          --hidden-import pynput.mouse._darwin
+          --hidden-import pynput.keyboard._darwin
+          --hidden-import qrcode.image.svg
+          --hidden-import tkinter
+          server.py
+
+      - name: Create OrangeMouse.dmg
+        run: |
+          set -euo pipefail
+          test -d dist/OrangeMouse.app
+          rm -rf dmgroot
+          mkdir dmgroot
+          cp -R dist/OrangeMouse.app dmgroot/
+          hdiutil create -volname OrangeMouse -srcfolder dmgroot -ov -format UDZO dist/OrangeMouse.dmg
+          ls -lh dist/OrangeMouse.dmg
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/OrangeMouse.dmg
+          if-no-files-found: error
+
+  release:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifact files
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          find artifacts -type f -print
+          cp artifacts/windows-exe/OrangeMouse.exe upload/OrangeMouse.exe
+          cp artifacts/macos-dmg/OrangeMouse.dmg upload/OrangeMouse.dmg
+          ls -lh upload
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            upload/OrangeMouse.exe
+            upload/OrangeMouse.dmg
+          generate_release_notes: true
+          body: |
+            Phone trackpad for Windows and macOS.
+
+            - **OrangeMouse.exe** — Windows (x64), console plus a local browser page with the QR code
+            - **OrangeMouse.dmg** — macOS Apple Silicon (arm64), unsigned .app
+
+            See the README for SmartScreen, Gatekeeper, and Accessibility steps.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
