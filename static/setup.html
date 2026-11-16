@@ -25,6 +25,7 @@
       --accent: #e8943a;
       --ok: #3ecf8e;
       --bad: #f06565;
+      --warn: #f0b43d;
     }
     * { box-sizing: border-box; }
     body {
@@ -35,7 +36,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
     }
     .wrap {
-      max-width: 560px;
+      max-width: 640px;
       margin: 0 auto;
       padding: 32px 20px 48px;
     }
@@ -51,6 +52,11 @@
       color: var(--accent);
       letter-spacing: 0.02em;
     }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      font-weight: 650;
+    }
     .lang-btn, .btn {
       appearance: none;
       border: 1px solid var(--line);
@@ -65,13 +71,13 @@
     }
     .lang-btn:hover, .btn:hover { border-color: var(--accent); }
     .lead { color: var(--muted); margin: 0 0 22px; line-height: 1.5; }
-    .card {
+    .card, .box {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 16px;
       padding: 22px;
-      text-align: center;
     }
+    .card { text-align: center; }
     .qr {
       width: 240px;
       height: 240px;
@@ -101,6 +107,65 @@
       color: #1a1208;
     }
     .btn.danger { color: #ffd0d0; }
+    .box { margin-top: 16px; text-align: left; }
+    .box.warn {
+      border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+      background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+    }
+    .box p, .box li { color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .box ol, .box ul { margin: 0; padding-left: 1.2em; }
+    .box li { margin: 6px 0; }
+    .cmd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      word-break: break-all;
+      background: #0c1016;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 10px 0;
+      user-select: all;
+      color: var(--text);
+    }
+    #alts { display: none; }
+    #alts.visible { display: block; }
+    .alt-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .alt {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #0c1016;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px;
+      cursor: pointer;
+      text-align: center;
+      font: inherit;
+    }
+    .alt:hover, .alt.selected { border-color: var(--accent); }
+    .alt.selected { box-shadow: 0 0 0 1px var(--accent); }
+    .alt .mini-qr {
+      width: 104px;
+      height: 104px;
+      margin: 0 auto 8px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 5px;
+    }
+    .alt .mini-qr svg { width: 100%; height: 100%; display: block; }
+    .alt .ip { font-size: 12px; font-weight: 650; word-break: break-all; }
+    .alt .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .alt .tag {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 10px;
+      color: var(--warn);
+    }
+    #msg { margin-top: 12px; font-size: 13px; color: var(--ok); min-height: 1.2em; }
+    #msg.err { color: var(--bad); }
+    .stopped h2 { margin: 0 0 8px; }
     .hint {
       margin: 18px 0 0;
       color: var(--muted);
@@ -109,9 +174,6 @@
       text-align: left;
     }
     .hint li { margin: 6px 0; }
-    #msg { margin-top: 12px; font-size: 13px; color: var(--ok); min-height: 1.2em; }
-    #msg.err { color: var(--bad); }
-    .stopped h2 { margin: 0 0 8px; }
   </style>
 </head>
 <body>
@@ -130,7 +192,21 @@
       </div>
       <div id="msg"></div>
     </div>
-    <ul class="hint" id="hint"></ul>
+    <div class="box" id="alts">
+      <h2 id="altsTitle"></h2>
+      <p id="altsLead"></p>
+      <div class="alt-grid" id="altGrid"></div>
+    </div>
+    <div class="box warn" id="firewallBox" hidden>
+      <h2 id="fwTitle"></h2>
+      <ol id="fwSteps"></ol>
+      <div class="cmd" id="fwCmd"></div>
+      <button type="button" class="btn primary" id="fwCopyBtn"></button>
+    </div>
+    <div class="box" id="troubleBox">
+      <h2 id="trTitle"></h2>
+      <ul id="trList"></ul>
+    </div>
   </div>
   <script>
   const CONFIG = __ORANGEMOUSE_CONFIG__;
@@ -142,30 +218,50 @@
         lead: "Scan this QR code with your phone (same Wi-Fi). Leave this window open while you use the trackpad.",
         copy: "Copy URL",
         copied: "Copied to clipboard.",
-        copyFail: "Could not copy — select the URL and copy it manually.",
+        copyFail: "Could not copy — select the text and copy it manually.",
         quit: "Quit OrangeMouse",
         quitting: "Stopping…",
         stopped: "OrangeMouse has stopped. You can close this tab.",
         quitFail: "Could not stop the server. Close the OrangeMouse window or press Ctrl+C in the terminal.",
-        hint1: "Phone and computer must be on the same Wi-Fi. Guest networks or AP isolation can block the connection.",
-        hint2: "On macOS, grant Accessibility permission to OrangeMouse (or Terminal / Python) or the pointer will not move.",
-        hint3: "The first time Windows Firewall asks, allow OrangeMouse / Python on a private network.",
-        hint4: "The token in the URL is new each time you start OrangeMouse. Do not share the link."
+        altsTitle: "Other addresses on this computer",
+        altsLead: "If the phone cannot open the page, tap another card and scan its QR. Prefer a 192.168.x or 10.x address — 172.x is often Hyper-V, WSL, or Docker, not your Wi-Fi.",
+        virtual: "possibly virtual",
+        fwTitle: "Windows Firewall is likely blocking the phone",
+        fw1: "If Windows asked for permission, allow OrangeMouse on both Private and Public networks, then scan again.",
+        fw2: "Or right-click Start → Windows Terminal (Admin) or PowerShell (Admin), then run the command below.",
+        fw3: "You can also go to Windows Security → Firewall & network protection → Allow an app through firewall, enable OrangeMouse, and check Private and Public.",
+        fwCopy: "Copy firewall command",
+        trTitle: "Phone page will not load?",
+        tr1: "Phone and computer must be on the same Wi-Fi. Guest, hotel, and “AP isolation” / client isolation networks often block device-to-device traffic.",
+        tr2: "Turn off VPN on the phone and the computer, then retry.",
+        tr3: "Allow OrangeMouse through Windows Firewall on Private and Public (see the box above if it appeared).",
+        tr4: "If this computer has Hyper-V, WSL, VMware, or Docker, the first QR may be the wrong adapter — try another address above.",
+        tr5: "Do not open 127.0.0.1 or “localhost” on the phone; that only works on the computer itself."
       },
       zh: {
         title: "OrangeMouse",
         lead: "用手机扫描这个二维码（需与电脑在同一 Wi-Fi）。使用触控板时请保持本页面打开。",
         copy: "复制网址",
         copied: "已复制到剪贴板。",
-        copyFail: "无法自动复制，请手动选中网址并复制。",
+        copyFail: "无法自动复制，请手动选中文本并复制。",
         quit: "退出 OrangeMouse",
         quitting: "正在退出…",
         stopped: "OrangeMouse 已退出。你可以关闭这个标签页。",
         quitFail: "无法退出服务。请关闭 OrangeMouse 窗口，或在终端里按 Ctrl+C。",
-        hint1: "手机和电脑必须在同一个 Wi-Fi。访客网络或 AP 隔离可能会导致无法连接。",
-        hint2: "在 macOS 上，请给 OrangeMouse（或终端 / Python）开启「辅助功能」权限，否则指针不会动。",
-        hint3: "Windows 防火墙第一次弹出提示时，请在专用网络上允许 OrangeMouse / Python。",
-        hint4: "网址中的令牌每次启动都会更换。不要把链接发到网上。"
+        altsTitle: "这台电脑上的其他地址",
+        altsLead: "如果手机打不开页面，点选下面另一张卡片再扫码。优先用 192.168.x 或 10.x；172.x 常常是 Hyper-V、WSL 或 Docker，不是家里的 Wi-Fi。",
+        virtual: "可能是虚拟网卡",
+        fwTitle: "Windows 防火墙很可能挡住了手机",
+        fw1: "如果 Windows 弹出过权限提示，请在「专用」和「公用」网络上都允许 OrangeMouse，然后再扫一次码。",
+        fw2: "或者右键「开始」→ 以管理员身份打开 Windows 终端或 PowerShell，然后运行下面的命令。",
+        fw3: "也可以到 Windows 安全中心 → 防火墙和网络保护 → 允许应用通过防火墙，启用 OrangeMouse，并勾选「专用」和「公用」。",
+        fwCopy: "复制防火墙命令",
+        trTitle: "手机一直打不开页面？",
+        tr1: "手机和电脑必须连在同一个 Wi-Fi。访客、酒店网络，以及开启了 AP 隔离 / 客户端隔离的路由，常常会禁止设备互访。",
+        tr2: "请先关掉手机和电脑上的 VPN，再试一次。",
+        tr3: "请在 Windows 防火墙上同时允许 OrangeMouse 通过「专用」和「公用」网络（若上方出现防火墙提示框，请按其中的步骤操作）。",
+        tr4: "如果这台电脑装了 Hyper-V、WSL、VMware 或 Docker，第一个二维码可能扫到了错误的网卡——请改试上面的其他地址。",
+        tr5: "不要在手机上打开 127.0.0.1 或 localhost，那只能在这台电脑本机访问。"
       }
     };
 
@@ -175,12 +271,47 @@
     const qrEl = document.getElementById("qr");
     const copyBtn = document.getElementById("copyBtn");
     const quitBtn = document.getElementById("quitBtn");
-    const hint = document.getElementById("hint");
     const msg = document.getElementById("msg");
     const card = document.getElementById("card");
+    const alts = document.getElementById("alts");
+    const altGrid = document.getElementById("altGrid");
+    const firewallBox = document.getElementById("firewallBox");
+    const fwCmd = document.getElementById("fwCmd");
+    const fwCopyBtn = document.getElementById("fwCopyBtn");
+
+    const candidates = (CONFIG && CONFIG.candidates) || [];
+    let currentUrl = (CONFIG && (CONFIG.primaryUrl || (CONFIG.phoneUrls || [])[0])) || "";
 
     function t(key) {
       return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+    }
+
+    function copyText(text, okMsg) {
+      function ok() { msg.className = ""; msg.textContent = okMsg || t("copied"); }
+      function fail() { msg.className = "err"; msg.textContent = t("copyFail"); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok).catch(fail);
+      } else {
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          ta.remove();
+          ok();
+        } catch (e) { fail(); }
+      }
+    }
+
+    function setPrimary(url, svg) {
+      currentUrl = url;
+      urlEl.textContent = url;
+      if (svg) qrEl.innerHTML = svg;
+      else qrEl.textContent = "QR";
+      altGrid.querySelectorAll(".alt").forEach(function (el) {
+        el.classList.toggle("selected", el.getAttribute("data-url") === url);
+      });
     }
 
     function applyI18n() {
@@ -189,7 +320,16 @@
       lead.textContent = t("lead");
       copyBtn.textContent = t("copy");
       quitBtn.textContent = t("quit");
-      hint.innerHTML = "<li>" + t("hint1") + "</li><li>" + t("hint2") + "</li><li>" + t("hint3") + "</li><li>" + t("hint4") + "</li>";
+      document.getElementById("altsTitle").textContent = t("altsTitle");
+      document.getElementById("altsLead").textContent = t("altsLead");
+      document.getElementById("fwTitle").textContent = t("fwTitle");
+      document.getElementById("fwSteps").innerHTML = "<li>" + t("fw1") + "</li><li>" + t("fw2") + "</li><li>" + t("fw3") + "</li>";
+      fwCopyBtn.textContent = t("fwCopy");
+      document.getElementById("trTitle").textContent = t("trTitle");
+      document.getElementById("trList").innerHTML = "<li>" + t("tr1") + "</li><li>" + t("tr2") + "</li><li>" + t("tr3") + "</li><li>" + t("tr4") + "</li><li>" + t("tr5") + "</li>";
+      altGrid.querySelectorAll(".alt .tag").forEach(function (el) {
+        el.textContent = t("virtual");
+      });
     }
 
     document.getElementById("langBtn").addEventListener("click", function () {
@@ -198,31 +338,54 @@
       applyI18n();
     });
 
-    const url = (CONFIG && (CONFIG.primaryUrl || (CONFIG.phoneUrls || [])[0])) || "";
-    urlEl.textContent = url;
-    if (CONFIG && CONFIG.qrSvg) {
-      qrEl.innerHTML = CONFIG.qrSvg;
-    } else {
-      qrEl.textContent = "QR";
+    var primarySvg = CONFIG && CONFIG.qrSvg;
+    if (!primarySvg && candidates.length) {
+      for (var i = 0; i < candidates.length; i++) {
+        if (candidates[i].url === currentUrl) { primarySvg = candidates[i].qrSvg; break; }
+      }
+    }
+    setPrimary(currentUrl, primarySvg);
+
+    if (candidates.length) {
+      candidates.forEach(function (c) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "alt" + (c.url === currentUrl ? " selected" : "");
+        btn.setAttribute("data-url", c.url);
+        const mini = document.createElement("div");
+        mini.className = "mini-qr";
+        if (c.qrSvg) mini.innerHTML = c.qrSvg;
+        const ip = document.createElement("div");
+        ip.className = "ip";
+        ip.textContent = c.ip || c.url;
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = c.name || "";
+        btn.appendChild(mini);
+        btn.appendChild(ip);
+        if (c.name) btn.appendChild(meta);
+        if (c.virtual) {
+          const tag = document.createElement("div");
+          tag.className = "tag";
+          tag.textContent = t("virtual");
+          btn.appendChild(tag);
+        }
+        btn.addEventListener("click", function () {
+          setPrimary(c.url, c.qrSvg);
+        });
+        altGrid.appendChild(btn);
+      });
+      if (candidates.length > 1) alts.classList.add("visible");
     }
 
-    copyBtn.addEventListener("click", function () {
-      function ok() { msg.className = ""; msg.textContent = t("copied"); }
-      function fail() { msg.className = "err"; msg.textContent = t("copyFail"); }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(ok).catch(fail);
-      } else {
-        try {
-          const range = document.createRange();
-          range.selectNodeContents(urlEl);
-          const sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-          document.execCommand("copy");
-          ok();
-        } catch (e) { fail(); }
-      }
-    });
+    copyBtn.addEventListener("click", function () { copyText(currentUrl); });
+
+    const fw = (CONFIG && CONFIG.firewall) || {};
+    if (fw.needed && !fw.ok && fw.command) {
+      firewallBox.hidden = false;
+      fwCmd.textContent = fw.command;
+      fwCopyBtn.addEventListener("click", function () { copyText(fw.command); });
+    }
 
     quitBtn.addEventListener("click", function () {
       msg.className = "";

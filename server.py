@@ -8,8 +8,10 @@ import asyncio
 import io
 import json
 import os
+import re
 import secrets
 import socket
+import subprocess
 import sys
 import webbrowser
 from pathlib import Path
@@ -138,26 +140,244 @@ def init_backend(dry_run: bool):
 # Network helpers
 # ---------------------------------------------------------------------------
 
-def lan_ips() -> list[str]:
-    ips: list[str] = []
+VIRTUAL_ADAPTER_RE = re.compile(
+    r"vethernet|vmware|virtualbox|\bvbox\b|wsl|hyper-v|\bhyperv\b|"
+    r"docker|tailscale|zerotier|npcap|loopback|bluetooth",
+    re.IGNORECASE,
+)
+
+FIREWALL_RULE_NAME = "OrangeMouse"
+
+
+def _is_loopback_ip(ip: str) -> bool:
+    return ip.startswith("127.") or ip in ("0.0.0.0", "::1")
+
+
+def _is_link_local_ip(ip: str) -> bool:
+    return ip.startswith("169.254.")
+
+
+def _is_rfc1918_172(ip: str) -> bool:
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(0.3)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        if ip and not ip.startswith("127."):
-            ips.append(ip)
-    except OSError:
-        pass
+        return int(parts[0]) == 172 and 16 <= int(parts[1]) <= 31
+    except ValueError:
+        return False
+
+
+def _is_preferred_private(ip: str) -> bool:
+    return ip.startswith("192.168.") or ip.startswith("10.")
+
+
+def is_virtual_adapter(name: str) -> bool:
+    return bool(name and VIRTUAL_ADAPTER_RE.search(name))
+
+
+def default_route_ip() -> str | None:
+    """Best-effort IP of the interface used for outbound IPv4 traffic."""
+    for target in (("8.8.8.8", 80), ("1.1.1.1", 80)):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.3)
+            s.connect(target)
+            ip = s.getsockname()[0]
+            s.close()
+            if ip and not _is_loopback_ip(ip) and not _is_link_local_ip(ip):
+                return ip
+        except OSError:
+            continue
+    return None
+
+
+def _collect_ipv4() -> list[dict]:
+    """Collect IPv4 addresses: psutil (with adapter names) plus socket fallbacks."""
+    found: dict[str, dict] = {}
+
+    def add(ip: str, name: str = "", source: str = "") -> None:
+        ip = (ip or "").strip()
+        if not ip or ":" in ip or _is_loopback_ip(ip) or _is_link_local_ip(ip):
+            return
+        rec = found.get(ip)
+        if rec is None:
+            found[ip] = {
+                "ip": ip,
+                "name": name or "",
+                "virtual": is_virtual_adapter(name),
+                "source": source,
+            }
+        else:
+            if name and not rec["name"]:
+                rec["name"] = name
+                rec["virtual"] = rec["virtual"] or is_virtual_adapter(name)
+            elif name and is_virtual_adapter(name):
+                rec["virtual"] = True
+                if not rec["name"]:
+                    rec["name"] = name
+
+    try:
+        import psutil  # type: ignore
+    except ImportError:
+        psutil = None  # type: ignore
+
+    if psutil is not None:
+        try:
+            stats = {}
+            try:
+                stats = psutil.net_if_stats()
+            except Exception:
+                stats = {}
+            for if_name, addrs in psutil.net_if_addrs().items():
+                st = stats.get(if_name)
+                if st is not None and not st.isup:
+                    continue
+                for addr in addrs:
+                    family = getattr(addr, "family", None)
+                    if family not in (socket.AF_INET, getattr(socket, "AF_INET", 2)):
+                        # Some platforms use integer 2 for IPv4.
+                        if family != 2:
+                            continue
+                    add(addr.address, if_name, "psutil")
+        except Exception:
+            pass
+
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = info[4][0]
-            if ip and ip not in ips and not ip.startswith("127."):
-                ips.append(ip)
+            add(info[4][0], "", "getaddrinfo")
     except OSError:
         pass
+
+    route = default_route_ip()
+    if route:
+        add(route, found.get(route, {}).get("name", ""), "udp-route")
+
+    return list(found.values())
+
+
+def _rank(candidate: dict, route_ip: str | None) -> tuple:
+    ip = candidate["ip"]
+    virtual = bool(candidate.get("virtual"))
+    if _is_preferred_private(ip):
+        family = 0 if ip.startswith("192.168.") else 1
+    elif _is_rfc1918_172(ip):
+        family = 4
+    else:
+        family = 3
+    # Prefer the default-route IP when it is a real LAN address.
+    route_boost = 0
+    if route_ip == ip and not virtual and not _is_rfc1918_172(ip):
+        route_boost = -1
+    return (virtual, family, route_boost, ip)
+
+
+def lan_candidates() -> list[dict]:
+    """Ranked IPv4 candidates for the phone URL (no loopback / link-local).
+
+    Prefer 192.168.x and 10.x. Deprioritize 172.16–31 (often WSL/Hyper-V/Docker).
+    Skip virtual adapters (vEthernet, VMware, WSL, Docker, Tailscale, …) when
+    a real adapter exists; otherwise keep them so the user can still try.
+    """
+    route_ip = default_route_ip()
+    all_cands = _collect_ipv4()
+    real = [c for c in all_cands if not c.get("virtual")]
+    chosen = real or all_cands
+    chosen.sort(key=lambda c: _rank(c, route_ip))
+    return chosen
+
+
+def lan_ips() -> list[str]:
+    ips = [c["ip"] for c in lan_candidates()]
     return ips or ["127.0.0.1"]
+
+
+def firewall_allow_command(port: int, exe: str | None = None) -> str:
+    program = exe or (sys.executable if IS_FROZEN else "OrangeMouse.exe")
+    return (
+        f'netsh advfirewall firewall add rule name="{FIREWALL_RULE_NAME}" '
+        f"dir=in action=allow enable=yes profile=private,public "
+        f'program="{program}" protocol=TCP localport={int(port)}'
+    )
+
+
+def ensure_windows_firewall(port: int) -> dict:
+    """On a frozen Windows build, try to add an inbound allow rule for this exe/port."""
+    needed = bool(IS_FROZEN and sys.platform == "win32")
+    exe = sys.executable if IS_FROZEN else ""
+    info = {
+        "needed": needed,
+        "ok": not needed,
+        "command": firewall_allow_command(port, exe or None) if needed or sys.platform == "win32" else "",
+        "exePath": exe,
+        "port": port,
+    }
+    if not needed:
+        return info
+
+    creationflags = 0
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+        creationflags = subprocess.CREATE_NO_WINDOW
+
+    def run_netsh(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            creationflags=creationflags,
+        )
+
+    try:
+        run_netsh(
+            [
+                "netsh",
+                "advfirewall",
+                "firewall",
+                "delete",
+                "rule",
+                f"name={FIREWALL_RULE_NAME}",
+            ]
+        )
+        added = run_netsh(
+            [
+                "netsh",
+                "advfirewall",
+                "firewall",
+                "add",
+                "rule",
+                f"name={FIREWALL_RULE_NAME}",
+                "dir=in",
+                "action=allow",
+                "enable=yes",
+                "profile=private,public",
+                f"program={exe}",
+                "protocol=TCP",
+                f"localport={int(port)}",
+            ]
+        )
+        if added.returncode == 0:
+            info["ok"] = True
+            print(
+                f"Windows Firewall: allow rule added for port {port}. / 已添加防火墙放行规则（端口 {port}）。",
+                flush=True,
+            )
+            return info
+        info["ok"] = False
+        detail = (added.stderr or added.stdout or "").strip()
+        print(
+            "Windows Firewall: could not add an allow rule (usually needs Administrator).\n"
+            "无法添加防火墙放行规则（通常需要管理员权限）。",
+            flush=True,
+        )
+        if detail:
+            print(detail, flush=True)
+        print("Run this in an Administrator PowerShell: / 请在管理员 PowerShell 中运行：", flush=True)
+        print(f"  {info['command']}", flush=True)
+    except Exception as exc:
+        info["ok"] = False
+        print(f"Windows Firewall: {exc}", flush=True)
+    return info
+
 
 
 def print_qr(url: str) -> None:
@@ -318,20 +538,49 @@ FORBIDDEN_TEXT = (
 )
 
 
+def _url_candidates(port: int, token: str, host: str) -> list[dict]:
+    if host not in ("0.0.0.0", "::", ""):
+        items = [{"ip": host, "name": "bind", "virtual": False}]
+        if _is_loopback_ip(host):
+            items = [{"ip": host, "name": "localhost", "virtual": False}]
+    else:
+        items = lan_candidates()
+    out = []
+    for c in items:
+        url = f"http://{c['ip']}:{port}/?t={token}"
+        out.append(
+            {
+                "ip": c["ip"],
+                "name": c.get("name") or "",
+                "virtual": bool(c.get("virtual")),
+                "preferred": _is_preferred_private(c["ip"]) and not c.get("virtual"),
+                "url": url,
+                "qrSvg": make_qr_svg(url),
+            }
+        )
+    return out
+
+
 def make_app(token: str, controller: Controller, stop: asyncio.Event, port: int) -> web.Application:
     app = web.Application()
     app["token"] = token
     app["controller"] = controller
     app["clients"] = set()
-    app["port"] = port
     app["stop"] = stop
+    # Mutable bag so later fields can change after the app has started.
+    app["state"] = {
+        "port": port,
+        "bind_host": "0.0.0.0",
+        "firewall": {"needed": False, "ok": True, "command": "", "port": port},
+        "url_candidates": [],
+    }
 
     def token_ok(request: web.Request) -> bool:
         return request.query.get("t", "") == token
 
     def phone_urls() -> list[str]:
-        host = app.get("bind_host", "0.0.0.0")
-        p = app["port"]
+        host = app["state"].get("bind_host", "0.0.0.0")
+        p = app["state"]["port"]
         if host in ("0.0.0.0", "::", ""):
             return [f"http://{ip}:{p}/?t={token}" for ip in lan_ips()]
         return [f"http://{host}:{p}/?t={token}"]
@@ -355,13 +604,18 @@ def make_app(token: str, controller: Controller, stop: asyncio.Event, port: int)
             )
         html = (STATIC / "setup.html").read_text(encoding="utf-8")
         url = primary_phone_url()
+        st = app["state"]
+        p = st["port"]
         config = {
             "phoneUrls": phone_urls(),
             "primaryUrl": url,
-            "localUrl": f"http://127.0.0.1:{app['port']}/?t={token}",
+            "localUrl": f"http://127.0.0.1:{p}/?t={token}",
             "token": token,
-            "port": app["port"],
+            "port": p,
+            "bindHost": st.get("bind_host", "0.0.0.0"),
             "qrSvg": make_qr_svg(url),
+            "candidates": st.get("url_candidates") or _url_candidates(p, token, st.get("bind_host", "0.0.0.0")),
+            "firewall": st.get("firewall") or {"needed": False, "ok": True, "command": "", "port": p},
         }
         html = html.replace(
             "__ORANGEMOUSE_CONFIG__",
@@ -374,13 +628,18 @@ def make_app(token: str, controller: Controller, stop: asyncio.Event, port: int)
         if not (token_ok(request) or is_localhost(request)):
             return web.json_response({"error": "forbidden"}, status=403)
         url = primary_phone_url()
+        st = app["state"]
+        p = st["port"]
         return web.json_response(
             {
                 "phoneUrls": phone_urls(),
                 "primaryUrl": url,
-                "localUrl": f"http://127.0.0.1:{app['port']}/?t={token}",
+                "localUrl": f"http://127.0.0.1:{p}/?t={token}",
                 "token": token,
-                "port": app["port"],
+                "port": p,
+                "bindHost": st.get("bind_host", "0.0.0.0"),
+                "candidates": st.get("url_candidates") or _url_candidates(p, token, st.get("bind_host", "0.0.0.0")),
+                "firewall": st.get("firewall") or {"needed": False, "ok": True, "command": "", "port": p},
             }
         )
 
@@ -458,32 +717,40 @@ async def start_listening(runner: web.AppRunner, host: str, port: int, auto_fall
 async def run(host: str, port: int, token: str, controller: Controller, open_browser: bool, auto_fallback: bool) -> None:
     stop = asyncio.Event()
     app = make_app(token, controller, stop, port)
-    app["bind_host"] = host
+    app["state"]["bind_host"] = host
     runner = web.AppRunner(app)
     await runner.setup()
     try:
         port = await start_listening(runner, host, port, auto_fallback)
     except SystemExit:
         raise
-    app["port"] = port
+    fw = ensure_windows_firewall(port)
+    url_cands = _url_candidates(port, token, host)
+    app["state"].update({"port": port, "firewall": fw, "url_candidates": url_cands})
 
     local_setup = f"http://127.0.0.1:{port}/setup?t={token}"
     local_debug = f"http://127.0.0.1:{port}/?t={token}"
-    if host in ("0.0.0.0", "::", ""):
-        phone_urls = [f"http://{ip}:{port}/?t={token}" for ip in lan_ips()]
-    else:
-        phone_urls = [f"http://{host}:{port}/?t={token}"]
-    remote = [u for u in phone_urls if "127.0.0.1" not in u]
+    phone_urls = [c["url"] for c in url_cands] or [local_debug]
+    remote = [u for u in phone_urls if "127.0.0.1" not in u and "localhost" not in u]
     qr_url = (remote or phone_urls)[0]
 
     print("", flush=True)
     print("=" * 56, flush=True)
     print("  OrangeMouse is running / 已启动", flush=True)
     print("=" * 56, flush=True)
+    print(f"  Listening  / 监听地址:  {host}:{port}  (all interfaces)" if host in ("0.0.0.0", "::", "") else f"  Listening  / 监听地址:  {host}:{port}", flush=True)
     print(f"  Local page / 本机页面:  {local_setup}", flush=True)
     print(f"  Local pad  / 本机调试:  {local_debug}", flush=True)
-    for url in remote:
-        print(f"  Phone URL  / 手机打开:  {url}", flush=True)
+    if url_cands:
+        print("  Phone URLs / 手机地址:", flush=True)
+        for i, c in enumerate(url_cands):
+            mark = "  <-- scan this / 请扫这个" if c["url"] == qr_url else ""
+            label = c["name"] or c["ip"]
+            extra = " [virtual]" if c.get("virtual") else ""
+            print(f"    {c['url']}  ({label}{extra}){mark}", flush=True)
+    elif remote:
+        for url in remote:
+            print(f"  Phone URL  / 手机打开:  {url}", flush=True)
     if host not in ("0.0.0.0", "::", "") and host in ("127.0.0.1", "localhost"):
         print(
             "  Bound to localhost only; the phone cannot connect. Drop --host to serve the LAN.\n"

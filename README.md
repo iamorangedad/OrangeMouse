@@ -20,7 +20,9 @@ Because the exe is not code-signed, Windows may show **Windows protected your PC
 1. Click **More info**.
 2. Click **Run anyway**.
 
-The first time, Windows Firewall may ask for permission. Allow OrangeMouse on a **private** network (your home or office Wi-Fi).
+The first time, Windows Firewall may ask for permission. Allow OrangeMouse on **Private and Public** networks. The packaged app tries to add an allow rule for TCP port 8765; if that fails (it needs Administrator), the setup page shows a command you can copy into an Administrator PowerShell.
+
+If this computer has Hyper-V, WSL, VMware, or Docker, the setup page lists every local address with its own QR code. Prefer a **192.168.x** or **10.x** address; **172.x** is often a virtual adapter, not your Wi-Fi.
 
 ### macOS: unsigned app, then Accessibility
 
@@ -118,13 +120,32 @@ python server.py --no-browser    # do not open the local setup page
 
 Click the window you want to control first. Scan the QR code, or open the printed URL on your phone — it must include `?t=...`. Press Ctrl+C to quit. The token changes every launch, so scan again next time.
 
-Dependencies: `aiohttp` (web + WebSocket), `pynput` (mouse and keyboard), `qrcode` (QR codes; optional for the terminal, recommended).
+Dependencies: `aiohttp` (web + WebSocket), `pynput` (mouse and keyboard), `qrcode` (QR codes), `psutil` (lists network adapters so the correct Wi-Fi address can be chosen).
 
 ## Security
 
 Use OrangeMouse only on a network you trust. Each start creates a random token in the URL; without it, the page and WebSocket are rejected. Traffic is plain HTTP (not encrypted). Do not post or share the link.
 
 The local setup page’s Quit button only works from the computer itself (`127.0.0.1`).
+
+
+## Troubleshooting: the phone cannot open the page
+
+This is the most common problem on Windows after scanning the QR code.
+
+1. **Same Wi-Fi.** Phone and computer must be on the same network. Guest, hotel, and many “smart” routers with **AP isolation** / client isolation block device-to-device traffic. Try a normal (non-guest) Wi-Fi, or a phone hotspot that both use.
+2. **Turn VPN off** on the phone and the computer, then scan again.
+3. **Wrong address.** The setup page (and the terminal) list every IPv4 address. Scan the QR for a **192.168.x** or **10.x** address. Skip **172.16–31.x** if you have Hyper-V, WSL, or Docker, and skip anything labeled as a virtual adapter.
+4. **Windows Firewall.** Allow OrangeMouse on **Private and Public**:
+   - Windows Security → Firewall & network protection → Allow an app through firewall → OrangeMouse (check both boxes), or
+   - Run this in **PowerShell as Administrator** (change the path if needed; the setup page has a one-click copy with the real path):
+
+```powershell
+netsh advfirewall firewall add rule name="OrangeMouse" dir=in action=allow enable=yes profile=private,public program="C:\path\to\OrangeMouse.exe" protocol=TCP localport=8765
+```
+
+5. Do **not** open `http://127.0.0.1:...` on the phone. That address only works on the computer itself.
+6. OrangeMouse listens on **0.0.0.0:8765** (all interfaces) by default. The local setup page on the computer should still open even when the phone cannot; if even that fails, the app did not start correctly.
 
 ## Limitations
 
