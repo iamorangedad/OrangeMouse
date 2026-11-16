@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0c1016" />
+  <title>OrangeMouse</title>
+  <script>
+    window.__omLang = (function () {
+      try {
+        var s = localStorage.getItem("orangemouse-lang");
+        if (s === "zh" || s === "en") return s;
+      } catch (e) {}
+      var nav = (navigator.language || navigator.userLanguage || "en").toLowerCase();
+      return nav.indexOf("zh") === 0 ? "zh" : "en";
+    })();
+    document.documentElement.lang = window.__omLang === "zh" ? "zh-CN" : "en";
+  </script>
+  <style>
+    :root {
+      --bg: #0c1016;
+      --panel: #161c26;
+      --panel-2: #1c2430;
+      --line: #2a3444;
+      --text: #e8eef7;
+      --muted: #8b97a8;
+      --accent: #e8943a;
+      --accent-2: #c97a28;
+      --ok: #3ecf8e;
+      --warn: #f0b43d;
+      --bad: #f06565;
+      --pad: #121821;
+      --strip: #18202c;
+      --btn: #232c3a;
+      --radius: 14px;
+      --safe-t: env(safe-area-inset-top, 0px);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      height: 100dvh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+    header, .controls, .toggles, .row, .footnote, input, .btn, .toggle, .slider, .lang-btn {
+      touch-action: manipulation;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      padding: calc(10px + var(--safe-t)) 12px calc(10px + var(--safe-b));
+      gap: 8px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--accent);
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lang-btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 650;
+      padding: 4px 10px;
+      min-height: 28px;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .lang-btn:active { border-color: var(--accent); }
+    #status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px 4px 8px;
+      white-space: nowrap;
+    }
+    #status .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--bad);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 25%, transparent);
+    }
+    #status.connected { color: #c8f0dc; }
+    #status.connected .dot {
+      background: var(--ok);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+    }
+    #status.connecting .dot {
+      background: var(--warn);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 25%, transparent);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .slider {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px 6px;
+    }
+    .slider label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .slider label span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
+    input[type="range"] {
+      width: 100%;
+      margin: 0;
+      accent-color: var(--accent);
+      height: 22px;
+    }
+    .toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .toggle, .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--btn);
+      color: var(--text);
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 550;
+      padding: 8px 10px;
+      min-height: 40px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .toggle { flex: 1 1 auto; }
+    .toggle.on {
+      background: color-mix(in srgb, var(--accent) 28%, var(--btn));
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .toggle.on.danger, #dragLock.on {
+      background: color-mix(in srgb, #f0b43d 30%, var(--btn));
+      border-color: var(--warn);
+    }
+    #stage {
+      flex: 1 1 auto;
+      display: flex;
+      min-height: 180px;
+      gap: 8px;
+      position: relative;
+    }
+    #pad, #strip {
+      position: relative;
+      background:
+        radial-gradient(1200px 400px at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+        linear-gradient(180deg, var(--panel-2), var(--pad));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      touch-action: none;
+    }
+    #pad { flex: 1 1 auto; }
+    #strip {
+      flex: 0 0 56px;
+      background:
+        repeating-linear-gradient(
+          to bottom,
+          transparent,
+          transparent 10px,
+          color-mix(in srgb, var(--accent) 8%, transparent) 10px,
+          color-mix(in srgb, var(--accent) 8%, transparent) 11px
+        ),
+        var(--strip);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #strip span {
+      writing-mode: vertical-rl;
+      letter-spacing: 0.25em;
+      font-size: 12px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+    #pad.pressed, #strip.pressed {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+    #pad.dragging {
+      border-color: var(--warn);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 50%, transparent);
+    }
+    #hint {
+      position: absolute;
+      left: 12px; right: 12px; bottom: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      pointer-events: none;
+      line-height: 1.45;
+    }
+    #modeTag {
+      position: absolute;
+      top: 10px; left: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      background: color-mix(in srgb, var(--bg) 70%, transparent);
+      border-radius: 8px;
+      padding: 3px 8px;
+      pointer-events: none;
+    }
+    .row { display: grid; gap: 6px; flex-shrink: 0; }
+    .row.clicks { grid-template-columns: 1.3fr 0.8fr 1.3fr; }
+    .row.keys { grid-template-columns: repeat(4, 1fr); }
+    .row.extra { grid-template-columns: 1fr; }
+    .btn.wide { min-height: 46px; }
+    .btn:active, .btn.down {
+      background: var(--accent-2);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    #leftBtn.down {
+      background: color-mix(in srgb, var(--ok) 35%, var(--btn));
+      border-color: var(--ok);
+    }
+    .footnote {
+      text-align: center;
+      font-size: 10px;
+      color: #667183;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OrangeMouse</h1>
+    <div class="header-right">
+      <button type="button" class="lang-btn" id="langBtn" aria-label="Language">EN / 中文</button>
+      <div id="status" class="connecting"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="slider">
+      <label><span data-i18n="moveSens">Pointer speed</span> <span id="moveVal">1.4</span></label>
+      <input id="moveSens" type="range" min="0.3" max="4" step="0.1" value="1.4" />
+    </div>
+    <div class="slider">
+      <label><span data-i18n="scrollSens">Scroll speed</span> <span id="scrollVal">1.2</span></label>
+      <input id="scrollSens" type="range" min="0.2" max="4" step="0.1" value="1.2" />
+    </div>
+  </div>
+
+  <div class="toggles">
+    <button type="button" class="toggle" id="scrollMode" data-i18n="scrollMode">One-finger scroll</button>
+    <button type="button" class="toggle on" id="natural" data-i18n="natural">Natural scroll</button>
+    <button type="button" class="toggle on" id="inertia" data-i18n="inertia">Inertia</button>
+    <button type="button" class="toggle" id="dragLock" data-i18n="dragLock">Drag lock</button>
+  </div>
+
+  <div id="stage">
+    <div id="pad" data-i18n-aria="padAria" aria-label="Trackpad">
+      <div id="modeTag" data-i18n="modeMove">Move pointer</div>
+      <div id="hint" data-i18n-html="hint">One-finger move · tap to click · double-tap<br>Two-finger tap: right click · swipe to scroll · hold to drag</div>
+    </div>
+    <div id="strip" data-i18n-aria="stripAria" aria-label="Scroll strip"><span data-i18n="scrollStrip">Scroll</span></div>
+  </div>
+
+  <div class="row clicks">
+    <button type="button" class="btn wide" id="leftBtn" data-i18n="left">Left</button>
+    <button type="button" class="btn wide" id="middleBtn" data-i18n="middle">Middle</button>
+    <button type="button" class="btn wide" id="rightBtn" data-i18n="right">Right</button>
+  </div>
+  <div class="row keys">
+    <button type="button" class="btn" id="pageUp" data-i18n="pageUp">Page Up</button>
+    <button type="button" class="btn" id="pageDown" data-i18n="pageDown">Page Down</button>
+    <button type="button" class="btn" id="homeBtn" data-i18n="top">Top</button>
+    <button type="button" class="btn" id="endBtn" data-i18n="bottom">Bottom</button>
+  </div>
+  <div class="row extra">
+    <button type="button" class="btn" id="backBtn" data-i18n="back">Back (browser)</button>
+  </div>
+  <div class="footnote" data-i18n="footnote">Phone and computer must be on the same Wi-Fi · The token in the URL changes each launch</div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const I18N = {
+      en: {
+        title: "OrangeMouse",
+        moveSens: "Pointer speed",
+        scrollSens: "Scroll speed",
+        scrollMode: "One-finger scroll",
+        natural: "Natural scroll",
+        inertia: "Inertia",
+        dragLock: "Drag lock",
+        padAria: "Trackpad",
+        stripAria: "Scroll strip",
+        scrollStrip: "Scroll",
+        modeMove: "Move pointer",
+        modeScroll: "One-finger scroll",
+        modeDrag: "Dragging",
+        hint: "One-finger move · tap to click · double-tap<br>Two-finger tap: right click · swipe to scroll · hold to drag",
+        left: "Left",
+        middle: "Middle",
+        right: "Right",
+        pageUp: "Page Up",
+        pageDown: "Page Down",
+        top: "Top",
+        bottom: "Bottom",
+        back: "Back (browser)",
+        footnote: "Phone and computer must be on the same Wi-Fi · The token in the URL changes each launch",
+        connecting: "Connecting…",
+        reconnecting: "Reconnecting…",
+        connected: "Connected",
+        disconnected: "Disconnected",
+        missingToken: "Missing token"
+      },
+      zh: {
+        title: "OrangeMouse",
+        moveSens: "指针灵敏度",
+        scrollSens: "滚动灵敏度",
+        scrollMode: "单指滚动",
+        natural: "自然滚动",
+        inertia: "惯性滚动",
+        dragLock: "拖拽锁定",
+        padAria: "触控板",
+        stripAria: "滚动条",
+        scrollStrip: "滚动",
+        modeMove: "移动指针",
+        modeScroll: "单指滚动",
+        modeDrag: "拖拽中",
+        hint: "单指移动指针 · 轻点单击 · 双击打开<br>两指轻点右键 · 两指滑动滚动 · 长按拖拽",
+        left: "左键",
+        middle: "中键",
+        right: "右键",
+        pageUp: "上一页",
+        pageDown: "下一页",
+        top: "到顶部",
+        bottom: "到底部",
+        back: "返回（浏览器后退）",
+        footnote: "手机与电脑需在同一 Wi-Fi · 令牌在网址中，每次启动都会更新",
+        connecting: "连接中…",
+        reconnecting: "重新连接中…",
+        connected: "已连接",
+        disconnected: "已断开",
+        missingToken: "缺少令牌"
+      }
+    };
+
+    let lang = window.__omLang === "zh" ? "zh" : "en";
+    let statusKind = "connecting";
+    let statusKey = "connecting";
+
+    function t(key) {
+      return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+    }
+
+    function applyI18n() {
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+      document.title = t("title");
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        el.textContent = t(el.getAttribute("data-i18n"));
+      });
+      document.querySelectorAll("[data-i18n-html]").forEach(function (el) {
+        el.innerHTML = t(el.getAttribute("data-i18n-html"));
+      });
+      document.querySelectorAll("[data-i18n-aria]").forEach(function (el) {
+        el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria")));
+      });
+      updateModeTag();
+      setStatus(statusKind, statusKey);
+    }
+
+    function saveLang() {
+      try { localStorage.setItem("orangemouse-lang", lang); } catch (_) {}
+    }
+
+    const statusEl = document.getElementById("status");
+    const statusText = document.getElementById("statusText");
+    const pad = document.getElementById("pad");
+    const strip = document.getElementById("strip");
+    const modeTag = document.getElementById("modeTag");
+    const moveSens = document.getElementById("moveSens");
+    const scrollSens = document.getElementById("scrollSens");
+    const moveVal = document.getElementById("moveVal");
+    const scrollVal = document.getElementById("scrollVal");
+    const scrollModeBtn = document.getElementById("scrollMode");
+    const naturalBtn = document.getElementById("natural");
+    const inertiaBtn = document.getElementById("inertia");
+    const dragLockBtn = document.getElementById("dragLock");
+    const leftBtn = document.getElementById("leftBtn");
+    const langBtn = document.getElementById("langBtn");
+
+    const TAP_MOVE = 14;
+    const TAP_MS = 280;
+    const HOLD_MS = 420;
+    const DOUBLE_MS = 260;
+    const INERTIA_FRICTION = 0.94;
+    const INERTIA_MIN = 0.12;
+
+    let ws = null;
+    let retry = 0;
+    let retryTimer = null;
+    let leftHeld = false;
+    let dragLock = false;
+    let scrollMode = false;
+    let natural = true;
+    let inertiaOn = true;
+
+    const settingsKey = "orangemouse-settings";
+    function loadSettings() {
+      try {
+        const s = JSON.parse(localStorage.getItem(settingsKey) || "{}");
+        if (s.move != null) moveSens.value = s.move;
+        if (s.scroll != null) scrollSens.value = s.scroll;
+        if (typeof s.natural === "boolean") natural = s.natural;
+        if (typeof s.inertia === "boolean") inertiaOn = s.inertia;
+        if (typeof s.scrollMode === "boolean") scrollMode = s.scrollMode;
+      } catch (_) {}
+      syncToggles();
+      moveVal.textContent = Number(moveSens.value).toFixed(1);
+      scrollVal.textContent = Number(scrollSens.value).toFixed(1);
+    }
+    function saveSettings() {
+      try {
+        localStorage.setItem(settingsKey, JSON.stringify({
+          move: moveSens.value, scroll: scrollSens.value,
+          natural, inertia: inertiaOn, scrollMode
+        }));
+      } catch (_) {}
+    }
+    function syncToggles() {
+      scrollModeBtn.classList.toggle("on", scrollMode);
+      naturalBtn.classList.toggle("on", natural);
+      inertiaBtn.classList.toggle("on", inertiaOn);
+      dragLockBtn.classList.toggle("on", dragLock);
+      updateModeTag();
+    }
+    function updateModeTag() {
+      if (dragLock || leftHeld) modeTag.textContent = t("modeDrag");
+      else if (scrollMode) modeTag.textContent = t("modeScroll");
+      else modeTag.textContent = t("modeMove");
+    }
+
+    langBtn.addEventListener("click", function () {
+      lang = lang === "zh" ? "en" : "zh";
+      saveLang();
+      applyI18n();
+    });
+
+    moveSens.addEventListener("input", function () { moveVal.textContent = Number(moveSens.value).toFixed(1); saveSettings(); });
+    scrollSens.addEventListener("input", function () { scrollVal.textContent = Number(scrollSens.value).toFixed(1); saveSettings(); });
+    scrollModeBtn.addEventListener("click", function () { scrollMode = !scrollMode; syncToggles(); saveSettings(); });
+    naturalBtn.addEventListener("click", function () { natural = !natural; syncToggles(); saveSettings(); });
+    inertiaBtn.addEventListener("click", function () { inertiaOn = !inertiaOn; syncToggles(); saveSettings(); });
+    dragLockBtn.addEventListener("click", function () {
+      dragLock = !dragLock;
+      if (dragLock) pressLeft();
+      else releaseLeft();
+      syncToggles();
+    });
+
+    function setStatus(kind, key) {
+      statusKind = kind;
+      statusKey = key;
+      statusEl.className = kind;
+      statusText.textContent = t(key);
+    }
+
+    function send(obj) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(obj));
+        return true;
+      }
+      return false;
+    }
+
+    function connect() {
+      const token = new URLSearchParams(location.search).get("t") || "";
+      if (!token) {
+        setStatus("", "missingToken");
+        return;
+      }
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      setStatus("connecting", retry ? "reconnecting" : "connecting");
+      try {
+        ws = new WebSocket(proto + "//" + location.host + "/ws?t=" + encodeURIComponent(token));
+      } catch (e) {
+        scheduleReconnect();
+        return;
+      }
+      ws.onopen = function () {
+        retry = 0;
+        setStatus("connected", "connected");
+      };
+      ws.onclose = function () {
+        setStatus("", "disconnected");
+        if (leftHeld && !dragLock) releaseLeft(true);
+        scheduleReconnect();
+      };
+      ws.onerror = function () {
+        try { ws.close(); } catch (_) {}
+      };
+    }
+
+    function scheduleReconnect() {
+      if (retryTimer) return;
+      const delay = Math.min(1000 * Math.pow(1.6, retry), 8000);
+      retry += 1;
+      setStatus("connecting", "reconnecting");
+      retryTimer = setTimeout(function () {
+        retryTimer = null;
+        connect();
+      }, delay);
+    }
+
+    function pressLeft() {
+      if (leftHeld) return;
+      leftHeld = true;
+      send({ type: "press", button: "left" });
+      leftBtn.classList.add("down");
+      pad.classList.add("dragging");
+      updateModeTag();
+    }
+    function releaseLeft(force) {
+      if (!leftHeld) return;
+      if (dragLock && !force) return;
+      leftHeld = false;
+      send({ type: "release", button: "left" });
+      leftBtn.classList.remove("down");
+      pad.classList.remove("dragging");
+      updateModeTag();
+    }
+
+    window.addEventListener("pagehide", function () {
+      if (leftHeld) {
+        dragLock = false;
+        releaseLeft(true);
+      }
+    });
+
+    function bindHoldClick(el, button) {
+      const down = function (ev) {
+        ev.preventDefault();
+        el.classList.add("down");
+        if (button === "left") pressLeft();
+        else send({ type: "click", button: button, count: 1 });
+      };
+      const up = function (ev) {
+        ev.preventDefault();
+        if (button === "left") releaseLeft(false);
+        if (!(button === "left" && (dragLock || leftHeld))) el.classList.remove("down");
+      };
+      el.addEventListener("pointerdown", down);
+      el.addEventListener("pointerup", up);
+      el.addEventListener("pointercancel", up);
+      el.addEventListener("lostpointercapture", up);
+      el.addEventListener("pointerdown", function (ev) {
+        try { el.setPointerCapture(ev.pointerId); } catch (_) {}
+      });
+    }
+    bindHoldClick(leftBtn, "left");
+    document.getElementById("middleBtn").addEventListener("click", function (e) {
+      e.preventDefault();
+      send({ type: "click", button: "middle", count: 1 });
+    });
+    document.getElementById("rightBtn").addEventListener("click", function (e) {
+      e.preventDefault();
+      send({ type: "click", button: "right", count: 1 });
+    });
+    function bindKey(id, key) {
+      document.getElementById(id).addEventListener("click", function (e) {
+        e.preventDefault();
+        send({ type: "key", key: key });
+      });
+    }
+    bindKey("pageUp", "page_up");
+    bindKey("pageDown", "page_down");
+    bindKey("homeBtn", "home");
+    bindKey("endBtn", "end");
+    bindKey("backBtn", "back");
+
+    const fingers = new Map();
+    let mode = null;
+    let holdTimer = null;
+    let pendingClick = null;
+    let lastTapAt = 0;
+    let lastTapWasSingle = false;
+    let movedFar = false;
+    let armedDrag = false;
+    let lastCentroid = null;
+    let lastScrollAt = 0;
+    let velX = 0, velY = 0;
+    let inertiaRaf = 0;
+    let twoFingerTapPossible = false;
+    let peakFingers = 0;
+
+    function clearHold() {
+      if (holdTimer) {
+        clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+    }
+
+    function centroid() {
+      let x = 0, y = 0, n = 0;
+      fingers.forEach(function (f) { x += f.x; y += f.y; n += 1; });
+      return n ? { x: x / n, y: y / n, n: n } : null;
+    }
+
+    function stopInertia() {
+      if (inertiaRaf) {
+        cancelAnimationFrame(inertiaRaf);
+        inertiaRaf = 0;
+      }
+      velX = 0;
+      velY = 0;
+    }
+
+    function startInertia() {
+      if (!inertiaOn) return;
+      if (Math.hypot(velX, velY) < INERTIA_MIN * 4) return;
+      let vx = velX, vy = velY;
+      const step = function () {
+        vx *= INERTIA_FRICTION;
+        vy *= INERTIA_FRICTION;
+        if (Math.hypot(vx, vy) < INERTIA_MIN) {
+          inertiaRaf = 0;
+          return;
+        }
+        sendScroll(vx, vy);
+        inertiaRaf = requestAnimationFrame(step);
+      };
+      inertiaRaf = requestAnimationFrame(step);
+    }
+
+    function sendMove(dx, dy) {
+      const s = Number(moveSens.value);
+      send({ type: "move", dx: dx * s, dy: dy * s });
+    }
+
+    function sendScroll(dx, dy) {
+      const s = Number(scrollSens.value);
+      const sx = (natural ? -dx : dx) * s * 0.08;
+      const sy = (natural ? -dy : dy) * s * 0.08;
+      send({ type: "scroll", dx: sx, dy: sy });
+    }
+
+    function onStart(ev, surface) {
+      ev.preventDefault();
+      stopInertia();
+      const now = performance.now();
+      fingers.set(ev.pointerId, {
+        x: ev.clientX, y: ev.clientY, t: now,
+        startX: ev.clientX, startY: ev.clientY, startT: now,
+        surface: surface
+      });
+      peakFingers = Math.max(peakFingers, fingers.size);
+      surface.classList.add("pressed");
+      lastCentroid = centroid();
+      lastScrollAt = now;
+
+      if (fingers.size === 1) {
+        peakFingers = 1;
+        movedFar = false;
+        armedDrag = false;
+        twoFingerTapPossible = false;
+        mode = "pending";
+        if (surface === strip || (scrollMode && surface === pad && !dragLock && !leftHeld)) {
+          mode = "scroll";
+        } else if (dragLock || leftHeld) {
+          mode = "move";
+        } else {
+          clearHold();
+          holdTimer = setTimeout(function () {
+            holdTimer = null;
+            if (fingers.size === 1 && !movedFar && mode === "pending") {
+              armedDrag = true;
+              pressLeft();
+              mode = "move";
+              if (navigator.vibrate) try { navigator.vibrate(20); } catch (_) {}
+            }
+          }, HOLD_MS);
+        }
+      } else if (fingers.size === 2) {
+        clearHold();
+        twoFingerTapPossible = peakFingers === 2 && !movedFar && !armedDrag;
+        mode = "scroll";
+        lastCentroid = centroid();
+      }
+    }
+
+    function onMove(ev) {
+      if (!fingers.has(ev.pointerId)) return;
+      ev.preventDefault();
+      const f = fingers.get(ev.pointerId);
+      const nx = ev.clientX, ny = ev.clientY;
+      const now = performance.now();
+      f.x = nx; f.y = ny; f.t = now;
+      if (Math.hypot(nx - f.startX, ny - f.startY) > TAP_MOVE) {
+        movedFar = true;
+        twoFingerTapPossible = false;
+        if (mode === "pending") {
+          clearHold();
+          if (f.surface === strip || (scrollMode && !leftHeld && !dragLock)) mode = "scroll";
+          else mode = "move";
+        }
+      }
+      const c = centroid();
+      if (!c || !lastCentroid) { lastCentroid = c; return; }
+      const dx = c.x - lastCentroid.x;
+      const dy = c.y - lastCentroid.y;
+      const dt = Math.max(1, now - lastScrollAt);
+      lastCentroid = c;
+      lastScrollAt = now;
+
+      if (mode === "scroll" || (fingers.size >= 2)) {
+        mode = "scroll";
+        velX = velX * 0.4 + (dx / dt * 16) * 0.6;
+        velY = velY * 0.4 + (dy / dt * 16) * 0.6;
+        sendScroll(dx, dy);
+      } else if (mode === "move" || mode === "pending") {
+        if (mode === "pending" && movedFar) {
+          clearHold();
+          mode = "move";
+        }
+        if (mode === "move") sendMove(dx, dy);
+      }
+    }
+
+    function onEnd(ev, surface) {
+      if (!fingers.has(ev.pointerId)) return;
+      ev.preventDefault();
+      const f = fingers.get(ev.pointerId);
+      const now = performance.now();
+      const duration = now - f.startT;
+      const dist = Math.hypot(f.x - f.startX, f.y - f.startY);
+      fingers.delete(ev.pointerId);
+      lastCentroid = centroid();
+
+      if (fingers.size === 0) {
+        surface.classList.remove("pressed");
+        pad.classList.remove("pressed");
+        strip.classList.remove("pressed");
+        clearHold();
+
+        const wasTwo = peakFingers >= 2;
+        const wasTap = !movedFar && dist < TAP_MOVE && duration < TAP_MS;
+
+        if (wasTwo && wasTap && twoFingerTapPossible) {
+          send({ type: "click", button: "right", count: 1 });
+        } else if (!wasTwo && wasTap && f.surface === pad) {
+          if (lastTapWasSingle && (now - lastTapAt) < DOUBLE_MS) {
+            if (pendingClick) { clearTimeout(pendingClick); pendingClick = null; }
+            send({ type: "click", button: "left", count: 2 });
+            lastTapWasSingle = false;
+            lastTapAt = 0;
+          } else {
+            lastTapWasSingle = true;
+            lastTapAt = now;
+            if (pendingClick) clearTimeout(pendingClick);
+            pendingClick = setTimeout(function () {
+              pendingClick = null;
+              send({ type: "click", button: "left", count: 1 });
+            }, DOUBLE_MS);
+          }
+        } else if (mode === "scroll") {
+          startInertia();
+        } else if (armedDrag) {
+          if (!dragLock) releaseLeft();
+          armedDrag = false;
+        }
+
+        mode = null;
+        movedFar = false;
+        peakFingers = 0;
+        twoFingerTapPossible = false;
+        lastCentroid = null;
+      } else if (fingers.size === 1 && mode === "scroll" && !scrollMode && surface !== strip) {
+        mode = leftHeld || dragLock ? "move" : "pending";
+        lastCentroid = centroid();
+      }
+    }
+
+    function bindSurface(el) {
+      el.addEventListener("pointerdown", function (e) {
+        try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        onStart(e, el);
+      });
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerup", function (e) { onEnd(e, el); });
+      el.addEventListener("pointercancel", function (e) { onEnd(e, el); });
+    }
+    bindSurface(pad);
+    bindSurface(strip);
+
+    document.addEventListener("touchmove", function (e) {
+      if (e.target.closest && e.target.closest("#pad, #strip")) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+    document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    document.addEventListener("dblclick", function (e) {
+      if (e.target.closest && e.target.closest("#pad, #strip")) e.preventDefault();
+    });
+
+    applyI18n();
+    loadSettings();
+    connect();
+  })();
+  </script>
+</body>
+</html>

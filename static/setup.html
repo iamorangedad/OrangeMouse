@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OrangeMouse</title>
+  <script>
+    window.__omLang = (function () {
+      try {
+        var s = localStorage.getItem("orangemouse-lang");
+        if (s === "zh" || s === "en") return s;
+      } catch (e) {}
+      var nav = (navigator.language || navigator.userLanguage || "en").toLowerCase();
+      return nav.indexOf("zh") === 0 ? "zh" : "en";
+    })();
+    document.documentElement.lang = window.__omLang === "zh" ? "zh-CN" : "en";
+  </script>
+  <style>
+    :root {
+      --bg: #0c1016;
+      --panel: #161c26;
+      --line: #2a3444;
+      --text: #e8eef7;
+      --muted: #8b97a8;
+      --accent: #e8943a;
+      --ok: #3ecf8e;
+      --bad: #f06565;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(900px 400px at 50% -10%, rgba(232, 148, 58, 0.16), transparent 60%), var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+    }
+    .wrap {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .lang-btn, .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 999px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 650;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    .lang-btn:hover, .btn:hover { border-color: var(--accent); }
+    .lead { color: var(--muted); margin: 0 0 22px; line-height: 1.5; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px;
+      text-align: center;
+    }
+    .qr {
+      width: 240px;
+      height: 240px;
+      margin: 0 auto 16px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qr svg { width: 100%; height: 100%; display: block; }
+    .url {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      word-break: break-all;
+      background: #0c1016;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 0 0 12px;
+      user-select: all;
+    }
+    .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #1a1208;
+    }
+    .btn.danger { color: #ffd0d0; }
+    .hint {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      text-align: left;
+    }
+    .hint li { margin: 6px 0; }
+    #msg { margin-top: 12px; font-size: 13px; color: var(--ok); min-height: 1.2em; }
+    #msg.err { color: var(--bad); }
+    .stopped h2 { margin: 0 0 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>OrangeMouse</h1>
+      <button type="button" class="lang-btn" id="langBtn">EN / 中文</button>
+    </header>
+    <p class="lead" id="lead"></p>
+    <div class="card" id="card">
+      <div class="qr" id="qr"></div>
+      <div class="url" id="url"></div>
+      <div class="actions">
+        <button type="button" class="btn primary" id="copyBtn"></button>
+        <button type="button" class="btn danger" id="quitBtn"></button>
+      </div>
+      <div id="msg"></div>
+    </div>
+    <ul class="hint" id="hint"></ul>
+  </div>
+  <script>
+  const CONFIG = __ORANGEMOUSE_CONFIG__;
+  (function () {
+    "use strict";
+    const I18N = {
+      en: {
+        title: "OrangeMouse",
+        lead: "Scan this QR code with your phone (same Wi-Fi). Leave this window open while you use the trackpad.",
+        copy: "Copy URL",
+        copied: "Copied to clipboard.",
+        copyFail: "Could not copy — select the URL and copy it manually.",
+        quit: "Quit OrangeMouse",
+        quitting: "Stopping…",
+        stopped: "OrangeMouse has stopped. You can close this tab.",
+        quitFail: "Could not stop the server. Close the OrangeMouse window or press Ctrl+C in the terminal.",
+        hint1: "Phone and computer must be on the same Wi-Fi. Guest networks or AP isolation can block the connection.",
+        hint2: "On macOS, grant Accessibility permission to OrangeMouse (or Terminal / Python) or the pointer will not move.",
+        hint3: "The first time Windows Firewall asks, allow OrangeMouse / Python on a private network.",
+        hint4: "The token in the URL is new each time you start OrangeMouse. Do not share the link."
+      },
+      zh: {
+        title: "OrangeMouse",
+        lead: "用手机扫描这个二维码（需与电脑在同一 Wi-Fi）。使用触控板时请保持本页面打开。",
+        copy: "复制网址",
+        copied: "已复制到剪贴板。",
+        copyFail: "无法自动复制，请手动选中网址并复制。",
+        quit: "退出 OrangeMouse",
+        quitting: "正在退出…",
+        stopped: "OrangeMouse 已退出。你可以关闭这个标签页。",
+        quitFail: "无法退出服务。请关闭 OrangeMouse 窗口，或在终端里按 Ctrl+C。",
+        hint1: "手机和电脑必须在同一个 Wi-Fi。访客网络或 AP 隔离可能会导致无法连接。",
+        hint2: "在 macOS 上，请给 OrangeMouse（或终端 / Python）开启「辅助功能」权限，否则指针不会动。",
+        hint3: "Windows 防火墙第一次弹出提示时，请在专用网络上允许 OrangeMouse / Python。",
+        hint4: "网址中的令牌每次启动都会更换。不要把链接发到网上。"
+      }
+    };
+
+    let lang = window.__omLang === "zh" ? "zh" : "en";
+    const lead = document.getElementById("lead");
+    const urlEl = document.getElementById("url");
+    const qrEl = document.getElementById("qr");
+    const copyBtn = document.getElementById("copyBtn");
+    const quitBtn = document.getElementById("quitBtn");
+    const hint = document.getElementById("hint");
+    const msg = document.getElementById("msg");
+    const card = document.getElementById("card");
+
+    function t(key) {
+      return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+    }
+
+    function applyI18n() {
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+      document.title = t("title");
+      lead.textContent = t("lead");
+      copyBtn.textContent = t("copy");
+      quitBtn.textContent = t("quit");
+      hint.innerHTML = "<li>" + t("hint1") + "</li><li>" + t("hint2") + "</li><li>" + t("hint3") + "</li><li>" + t("hint4") + "</li>";
+    }
+
+    document.getElementById("langBtn").addEventListener("click", function () {
+      lang = lang === "zh" ? "en" : "zh";
+      try { localStorage.setItem("orangemouse-lang", lang); } catch (_) {}
+      applyI18n();
+    });
+
+    const url = (CONFIG && (CONFIG.primaryUrl || (CONFIG.phoneUrls || [])[0])) || "";
+    urlEl.textContent = url;
+    if (CONFIG && CONFIG.qrSvg) {
+      qrEl.innerHTML = CONFIG.qrSvg;
+    } else {
+      qrEl.textContent = "QR";
+    }
+
+    copyBtn.addEventListener("click", function () {
+      function ok() { msg.className = ""; msg.textContent = t("copied"); }
+      function fail() { msg.className = "err"; msg.textContent = t("copyFail"); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(ok).catch(fail);
+      } else {
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(urlEl);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          document.execCommand("copy");
+          ok();
+        } catch (e) { fail(); }
+      }
+    });
+
+    quitBtn.addEventListener("click", function () {
+      msg.className = "";
+      msg.textContent = t("quitting");
+      fetch("/api/quit", { method: "POST" }).then(function (r) {
+        if (!r.ok) throw new Error("fail");
+        card.className = "card stopped";
+        card.innerHTML = "<h2>OrangeMouse</h2><p>" + t("stopped") + "</p>";
+      }).catch(function () {
+        msg.className = "err";
+        msg.textContent = t("quitFail");
+      });
+    });
+
+    applyI18n();
+  })();
+  </script>
+</body>
+</html>
