@@ -4,6 +4,12 @@
 
 把手机当成电脑的无线触控板。在 Windows 或 Mac 上运行 OrangeMouse，用手机浏览器打开同一 Wi-Fi 下的页面，就能移动指针、点击、拖拽和滚动，手机不用安装 App。
 
+<p align="center">
+  <img src="docs/images/phone-zh.png" width="280" alt="OrangeMouse 手机触控板（已连接）">
+  <img src="docs/images/setup-zh.png" width="280" alt="OrangeMouse 本机二维码页面">
+</p>
+
+
 ## 下载
 
 最方便的方式是从 [Releases](https://github.com/iamorangedad/OrangeMouse/releases) 下载已经打包好的版本：

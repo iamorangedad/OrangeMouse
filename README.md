@@ -4,6 +4,12 @@ English | [简体中文](README.zh-CN.md)
 
 Use your phone as a wireless trackpad for your Windows or Mac computer. Run OrangeMouse on the computer, open the page on your phone (same Wi-Fi), and move the cursor, click, drag, and scroll — no app install on the phone.
 
+<p align="center">
+  <img src="docs/images/phone-en.png" width="280" alt="OrangeMouse phone trackpad (connected)">
+  <img src="docs/images/setup-en.png" width="280" alt="OrangeMouse setup page with QR code">
+</p>
+
+
 ## Download
 
 The easiest way is to grab a build from [Releases](https://github.com/iamorangedad/OrangeMouse/releases):
